@@ -96,21 +96,28 @@ class TestFamToTable(unittest.TestCase):
         self.assertRaises(OSError, msprime_pedigrees.fam_to_table, "", tb)
 
     def test_one_line_fam(self):
-        f = self.write_to_file(content="\t".join(['0'] * 6))
+        entries = ['0']*6
+        entries[1] = '1' # IID in fam file cannot be '0'
+        f = self.write_to_file(content="\t".join(entries))
         tb = tskit.TableCollection(0).individuals
         tb = msprime_pedigrees.fam_to_table(f.name, tb)
         self.assertEqual(len(tb), 1)
-        self.assertTrue(np.array_equal(tb[0].parents, [0, 0]))
-        self.assertTrue(np.array_equal(tb[0].metadata, bytes(' '.join(['0']*4), 'utf-8')))
+        self.assertTrue(np.array_equal(tb[0].parents, [-1, -1]))
+        self.assertTrue(np.array_equal(tb[0].metadata, bytes('1 -1 -1 0', 'utf-8')))
     
     def test_non_int_sex(self):
-        f = self.write_to_file(content="\t".join(['0'] * 4 + ['F']))
+        entries = ['0']*6
+        entries[1] = '1' # IID cannot be '0'
+        entries[4] = 'F' # non-integer sex
+        f = self.write_to_file(content="\t".join(entries))
         tb = tskit.TableCollection(0).individuals
         self.assertRaises(ValueError, msprime_pedigrees.fam_to_table, famfile=f.name, tb=tb)
 
     def test_bad_int_sex(self):
+        entries = ['0']*6
         for bad_int in [-2, 3]:
-            f = self.write_to_file(content="\t".join(['0'] * 4 + [str(bad_int)]))
+            entries[4] = str(bad_int) # set sex to be a "bad" integer not in {0,1,2}
+            f = self.write_to_file(content="\t".join(entries))
             tb = tskit.TableCollection(0).individuals
             self.assertRaises(ValueError, msprime_pedigrees.fam_to_table, famfile=f.name, tb=tb)
     

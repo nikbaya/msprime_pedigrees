@@ -33,6 +33,8 @@ def choose_sex():
     sex = 1 + np.random.binomial(n=1, p=0.5)  # 1 = male, 2 = female
     return sex
 
+def choose_n_children(n_children_prob):
+    return np.random.choice(a=len(n_children_prob), p=n_children_prob)
 
 def make_parents(individuals_list, iid, child_generation):
     if child_generation - 1 >= 1:
@@ -76,7 +78,7 @@ def make_children(individuals_list, pat, mat, parent_generation, n_children,
 
 def make_partner(individuals_list, iid, sex, generation, max_generations,
                  n_children_prob=N_CHILDREN_PROB, percent_w_partner=PERCENT_W_PARTNER):
-    n_children = np.random.choice(a=len(n_children_prob), p=n_children_prob)
+    n_children = choose_n_children(n_children_prob)
     if (np.random.binomial(n=1, p=percent_w_partner)
         and n_children > 0
             and generation + 1 <= max_generations):
@@ -110,7 +112,7 @@ def make_partner(individuals_list, iid, sex, generation, max_generations,
 
 def make_siblings(individuals_list, iid, generation, max_generations,
                   n_children_prob=N_CHILDREN_PROB, percent_w_partner=PERCENT_W_PARTNER):
-    n_children = np.random.choice(a=len(n_children_prob), p=n_children_prob)
+    n_children = choose_n_children(n_children_prob)
     n_siblings = n_children - 1
     if n_siblings > 0:
         # print(f'make sibs for {iid}-{generation}')
@@ -130,3 +132,67 @@ def make_siblings(individuals_list, iid, generation, max_generations,
                 percent_w_partner=percent_w_partner
             )
     return individuals_list
+
+
+def simulate_pedigree_from_founders():
+    def is_valid_pair( pat_anc, mat_anc, mat_idx ):
+        common_anc = set(pat_anc).intersection(mat_anc)
+        return len(common_anc)==0
+
+    n_founders = 1000;
+    n_males = int(n_founders/2)
+    
+    n_children_prob = [0, 0.1, 0.5, 0.4]
+    
+    np.random.seed(4)
+    
+    # set up
+    curr_gen = [[], []]
+    sex = 1
+    for pat in range(n_males):
+        mat = n_males+pat
+        n_children = choose_n_children(n_children_prob=n_children_prob)
+        for _ in range(n_children):
+            curr_gen[sex] += [[[pat,mat]]]
+            sex = (sex+1)%2
+              
+        
+    n_generations = 2
+    max_gen_idx = 2 # max_gen_idx=2 -> 3 generations back
+    for _ in range(n_generations-1):
+        n_males = len(curr_gen[0])
+        n_females = len(curr_gen[1])
+        print(n_males, n_females)
+        next_gen = [[], []]
+        avail_mat = np.random.permutation(n_females)
+        for pat_idx in range(n_males):
+            pat = pat_idx
+            avail_mat_idx = 0
+            mat_idx = avail_mat[avail_mat_idx]
+            pat_anc = curr_gen[0][pat_idx][-1]
+            for mat_idx in avail_mat:
+                mat_anc = curr_gen[1][mat_idx][-1]
+                if is_valid_pair( pat_anc, mat_anc, mat_idx ): 
+                    break
+            if is_valid_pair( pat_anc, mat_anc, mat_idx ): # unrelated male/female pair has been made
+                avail_mat = avail_mat[avail_mat!=mat_idx]
+                n_children = choose_n_children(n_children_prob=n_children_prob)
+                mat = mat_idx + n_males
+                anc = [[pat, mat]]
+                for gen_idx in range(min(max_gen_idx, len(curr_gen[0][pat_idx]))): # number of generations for paternal and maternal ancestors should be the same
+                    pat_anc = curr_gen[0][pat_idx][gen_idx]
+                    mat_anc = curr_gen[1][mat_idx][gen_idx]
+                    anc += [pat_anc+mat_anc]
+                for _ in range(n_children):
+                    next_gen[sex] += [anc]
+                    sex = (sex+1)%2
+            else:
+                print(f'no match for pat={pat}')
+        # print(next_gen[0])
+        # print(next_gen[1])
+        curr_gen = next_gen
+        next_gen = [[], []]
+        
+        
+        
+        

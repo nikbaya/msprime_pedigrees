@@ -15,12 +15,12 @@ def list_to_table(individuals, tb: tskit.IndividualTable):
         return tb
     individuals = np.array(individuals)
     individuals = individuals[individuals[:,0].argsort(), :] # sort rows by first column (IID)
-    iid_to_idx = {}
+    iid_to_idx = {} # dict for translating old iid to new idx
     for idx, row in enumerate(individuals):
         iid_to_idx[row[0]] = idx        
-        individuals[idx] = np.append(row, [-1]*(4-len(row))).astype(int) # pad with -1
+        # individuals[idx] = np.append(row, [-1]*(4-len(row))).astype(int) # pad with -1
     for idx, (iid, pat, mat, sex)in enumerate(individuals):
-        sex = 0 if sex==-1 else int(sex) # unknown value (-1) for sex is translated to be coded as 0
+        sex = 0 if int(sex)==-1 else int(sex) # unknown value (-1) for sex is translated to be coded as 0
         if not (sex in range(3)):
             raise ValueError(
                 'Sex must be one of the following integers: 0 (unknown), 1 (male), 2 (female)')
@@ -35,18 +35,19 @@ def list_to_table(individuals, tb: tskit.IndividualTable):
 def fam_to_table(famfile: str, tb: tskit.IndividualTable):
     '''
     Convert fam file to tskit IndividualTable.
+    
+    Assumes fam file contains five columns: FID, IID, PAT, MAT, SEX
+    FID is not used when converting to a table.
     '''
-    fam = np.loadtxt(
+    convert_missing_pids = lambda s: s.replace(b'0', b'-1') # convert missing parent IDs from "0" to "-1"
+    individuals = np.loadtxt(
         famfile,
+        converters = {2: convert_missing_pids,
+                      3: convert_missing_pids},
         dtype=str,
+        ndmin=2,
+        usecols = (1,2,3,4) # only keep IID, PAT, MAT, SEX columns
     )  # requires same number of columns in each row, i.e. not ragged
 
-    # fam = np.genfromtxt(
-    #     fname=famfile,
-    #     dtype=str,
-    # )
-    if len(fam.shape) == 1:
-        fam = np.expand_dims(fam, axis=0)
-    individuals = fam[:, 1:5]
     tb = list_to_table(individuals=individuals, tb=tb)
     return tb
