@@ -94,7 +94,23 @@ class TestFamToTable(unittest.TestCase):
     def test_file_does_not_exist(self):
         tb = tskit.TableCollection(0).individuals
         self.assertRaises(OSError, msprime_pedigrees.fam_to_table, "", tb)
+        
+    def test_empty_file(self):
+        f = self.write_to_file(content="")
+        tb = tskit.TableCollection(0).individuals
+        self.assertWarns(UserWarning, msprime_pedigrees.fam_to_table, famfile=f.name, tb=tb)
+        tb = msprime_pedigrees.fam_to_table(f.name, tb)
+        self.assertEqual(len(tb), 0)
 
+    def test_insufficient_cols(self):
+        for n_cols in range(1,5):
+            entries = ['0']*n_cols # always fewer than the required 5 columns
+            if n_cols >= 2:
+                entries[1] = '1' # IID cannot be '0'
+            f = self.write_to_file(content="\t".join(entries))
+            tb = tskit.TableCollection(0).individuals
+            self.assertRaises(IndexError, msprime_pedigrees.fam_to_table, famfile=f.name, tb=tb)
+        
     def test_one_line_fam(self):
         entries = ['0']*6
         entries[1] = '1' # IID in fam file cannot be '0'
@@ -121,6 +137,53 @@ class TestFamToTable(unittest.TestCase):
             tb = tskit.TableCollection(0).individuals
             self.assertRaises(ValueError, msprime_pedigrees.fam_to_table, famfile=f.name, tb=tb)
     
-    def test_missing_cols(self):
-        pass    
+    def test_missing_phen_col(self):
+        entries = ['0']*6 
+        entries[1] = '1' # IID cannot be '0'
+        
+        f = self.write_to_file(content="\t".join(entries))
+        tb = tskit.TableCollection(0).individuals
+        tb = msprime_pedigrees.fam_to_table(f.name, tb)
+        
+        f_missing = self.write_to_file(content="\t".join(entries[:-1])) # ignore last column (PHEN column)
+        tb_missing = tskit.TableCollection(0).individuals
+        tb_missing = msprime_pedigrees.fam_to_table(f_missing.name, tb_missing)
+        
+        self.assertEqual(tb, tb_missing)
     
+    def test_multiple_line_file(self):
+        entries = [[0, 1, 0, 0, 0],
+                   [0, 2, 0, 0, 0]]
+        content = "\n".join(["\t".join(list(map(str, row))) for row in entries])
+        f = self.write_to_file(content=content)
+        tb = tskit.TableCollection(0).individuals
+        tb = msprime_pedigrees.fam_to_table(f.name, tb)
+        self.assertEqual(len(tb), 2)
+        
+    def test_duplicate_rows(self):
+        entries = [[0, 1, 0, 0, 0],
+                   [0, 1, 0, 0, 0]]
+        content = "\n".join(["\t".join(list(map(str, row))) for row in entries])
+        f = self.write_to_file(content=content)
+        tb = tskit.TableCollection(0).individuals
+        tb = msprime_pedigrees.fam_to_table(f.name, tb)
+        self.assertEqual(len(tb), 2)
+        
+    def test_duplicate_row_as_parent(self):
+        entries = [[0, 11, 0, 0, 0],
+                   [0, 11, 0, 0, 0],
+                   [0, 2, 11, 0, 0]]
+        content = "\n".join(["\t".join(list(map(str, row))) for row in entries])
+        f = self.write_to_file(content=content)
+        tb = tskit.TableCollection(0).individuals
+        tb = msprime_pedigrees.fam_to_table(f.name, tb)
+        self.assertEqual(len(tb), 3)
+        self.assertTrue(np.array_equal(tb[2].parents, [0, -1])) # parent ID is mapped to be the first instance of the duplicate individual
+        
+    def test_ragged_rows(self):
+        entries = [[0, 1, 0, 0, 0],
+                   [0, 2, '', 0, 0]]
+        content = "\n".join(["\t".join(list(map(str, row))) for row in entries])
+        f = self.write_to_file(content=content)
+        tb = tskit.TableCollection(0).individuals
+        self.assertRaises(IndexError, msprime_pedigrees.fam_to_table, famfile=f.name, tb=tb)

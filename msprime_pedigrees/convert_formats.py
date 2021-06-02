@@ -17,7 +17,9 @@ def list_to_table(individuals, tb: tskit.IndividualTable):
     individuals = individuals[individuals[:,0].argsort(), :] # sort rows by first column (IID)
     iid_to_idx = {} # dict for translating old iid to new idx
     for idx, row in enumerate(individuals):
-        iid_to_idx[row[0]] = idx        
+        iid = row[0]
+        if iid not in iid_to_idx: # need this check to avoid overwriting existing values
+            iid_to_idx[iid] = idx        
         # individuals[idx] = np.append(row, [-1]*(4-len(row))).astype(int) # pad with -1
     for idx, (iid, pat, mat, sex)in enumerate(individuals):
         sex = 0 if int(sex)==-1 else int(sex) # unknown value (-1) for sex is translated to be coded as 0
@@ -45,7 +47,7 @@ def fam_to_table(famfile: str, tb: tskit.IndividualTable):
         converters = {2: convert_missing_pids,
                       3: convert_missing_pids},
         dtype=str,
-        ndmin=2,
+        ndmin=2, # read file as 2-D table
         usecols = (1,2,3,4) # only keep IID, PAT, MAT, SEX columns
     )  # requires same number of columns in each row, i.e. not ragged
 
