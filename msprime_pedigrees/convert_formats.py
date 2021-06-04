@@ -2,54 +2,72 @@ import numpy as np
 import tskit
 
 
-def list_to_table(individuals, tb: tskit.IndividualTable):
+def array_to_table(individuals: np.ndarray, tc: tskit.TableCollection):
     '''
-    Add individuals in array or list of lists ``individuals``to ``tb``.
+    Add individuals in array ``individuals``to IndividualTable in TableCollection ``tc``.
 
-    :param individuals: Array of individuals, or list of lists. Each row should
-        be a different individual. Each row should have at least three columns: IID, PAT, MAT.
-        Another column, SEX, may also be included.
+    :param np.ndarray individuals: Array of individuals. Each row should
+        be a different individual. Each row must have five columns: FID, IID, PAT, MAT, SEX.
     :param tskit.IndividualTable tb: tskit ``IndividualTable``.
     '''
-    if len(individuals)==0:
-        return tb
-    individuals = np.array(individuals)
-    individuals = individuals[individuals[:,0].argsort(), :] # sort rows by first column (IID)
-    iid_to_idx = {} # dict for translating old iid to new idx
-    for idx, row in enumerate(individuals):
-        iid = row[0]
-        if iid not in iid_to_idx: # need this check to avoid overwriting existing values
-            iid_to_idx[iid] = idx        
-        # individuals[idx] = np.append(row, [-1]*(4-len(row))).astype(int) # pad with -1
-    for idx, (iid, pat, mat, sex)in enumerate(individuals):
-        sex = 0 if int(sex)==-1 else int(sex) # unknown value (-1) for sex is translated to be coded as 0
+    if len(individuals) == 0:
+        return tc
+    id_map = {}  # dict for translating PLINK ID to tskit IndividualTable ID
+    for tskit_id, (plink_fid, plink_iid, pat, mat,
+                   sex) in enumerate(individuals):
+        # need this to guarantee uniqueness of individual ID
+        plink_id = str(plink_fid) +' '+ str(plink_iid) # include space between strings to ensure uniqueness
+        if plink_id in id_map:
+            raise ValueError('Duplicate PLINK ID')
+        id_map[plink_id] = tskit_id
+    id_map['0'] = '-1'
+
+    tb = tc.individuals
+    tb.metadata_schema = tskit.MetadataSchema(
+        {
+            "codec": "json",
+            "type": "object",
+            "properties": {
+                    "plink_fid": {"type": "string"},
+                    "plink_iid": {"type": "string"},
+                    "sex": {"type": "integer"},
+            },
+            "required": ["plink_fid", "plink_iid", "sex"],
+            "additionalProperties": True,
+        }
+    )
+    for plink_fid, plink_iid, pat, mat, sex in individuals:
+        sex = int(sex)
         if not (sex in range(3)):
             raise ValueError(
                 'Sex must be one of the following integers: 0 (unknown), 1 (male), 2 (female)')
+        metadata_dict = {
+            'plink_fid': plink_fid,
+            'plink_iid': plink_iid,
+            'sex': sex}
+        pat = plink_fid+' '+pat if pat != '0' else pat
+        mat = plink_fid+' '+mat if mat != '0' else mat
         tb.add_row(
-            parents=[iid_to_idx.setdefault(pat, -1),
-                     iid_to_idx.setdefault(mat, -1)],
-            metadata=bytes(' '.join(map(str, [iid, pat, mat, sex])), 'utf-8')
+            parents=[id_map[pat],
+                     id_map[mat]],
+            metadata=metadata_dict
         )
-    return tb
+    return tc
 
 
-def fam_to_table(famfile: str, tb: tskit.IndividualTable):
+def fam_to_table(fname: str, tc: tskit.TableCollection):
     '''
     Convert fam file to tskit IndividualTable.
-    
+
     Assumes fam file contains five columns: FID, IID, PAT, MAT, SEX
     FID is not used when converting to a table.
     '''
-    convert_missing_pids = lambda s: s.replace(b'0', b'-1') # convert missing parent IDs from "0" to "-1"
     individuals = np.loadtxt(
-        famfile,
-        converters = {2: convert_missing_pids,
-                      3: convert_missing_pids},
+        fname,
         dtype=str,
-        ndmin=2, # read file as 2-D table
-        usecols = (1,2,3,4) # only keep IID, PAT, MAT, SEX columns
+        ndmin=2,  # read file as 2-D table
+        usecols=(0, 1, 2, 3, 4)  # only keep FID, IID, PAT, MAT, SEX columns
     )  # requires same number of columns in each row, i.e. not ragged
 
-    tb = list_to_table(individuals=individuals, tb=tb)
-    return tb
+    tc = array_to_table(individuals=individuals, tc=tc)
+    return tc
