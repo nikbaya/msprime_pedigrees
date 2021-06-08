@@ -2,34 +2,25 @@ import tskit
 import numpy as np
 # import networkx as nx
 
-# thousands of families with 0 children, 1 child, etc., adapted from
+# Thousands of families with 0 children, 1 child, etc., adapted from
 # https://www.statista.com/statistics/183790/number-of-families-in-the-us-by-number-of-children/
 N_CHILDREN_CTS = [50, 14, 13, 5, 2, 1]
 N_CHILDREN_PROB = np.asarray(N_CHILDREN_CTS) / sum(N_CHILDREN_CTS)
 
 PERCENT_W_PARTNER = 0.5
 
+def choose_sex():
+    sex = 1 + np.random.binomial(n=1, p=0.5)  # 1 = male, 2 = female
+    return sex
+
+def choose_n_children(n_children_prob):
+    return np.random.choice(a=len(n_children_prob), p=n_children_prob)
+
 def simulate_pedigree_from_founders():
     def is_valid_pair(pat_anc, mat_anc, mat_idx):
         common_anc = set(pat_anc).intersection(mat_anc)
         return len(common_anc) == 0
     np.random.seed(5)
-
-    # E[# of children] = 1:
-    # 191ms for n_founders=10000,   n_generations=5
-    # 2.36s for n_founders=100000,  n_generations=5
-    # 209ms for n_founders=10000,   n_generations=10
-    # 2.71s for n_founders=100000,  n_generations=10
-    # E[# of children] = 2:
-    # 583ms for n_founders=10000,   n_generations=5
-    # 11.9s for n_founders=100000,  n_generations=5
-    # 1.19s for n_founders=10000,   n_generations=10
-    # 23.9s for n_founders=100000,  n_generations=10
-    # E[# of children] = 3:
-    # 2.31s for n_founders=10000,   n_generations=5
-    # 1m29s for n_founders=100000,  n_generations=5
-    # s for n_founders=10000,   n_generations=10
-    # s for n_founders=100000,  n_generations=10
 
     n_founders = 10000
     n_males = int(n_founders / 2)
